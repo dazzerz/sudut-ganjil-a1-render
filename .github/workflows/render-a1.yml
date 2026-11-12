@@ -1,0 +1,98 @@
+name: Render Sudut Ganjil A1 (16x Parallel)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  render-chunks:
+    name: Chunk ${{ matrix.idx }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install Chromium OS dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 > /dev/null 2>&1
+          sudo apt-get install -y -qq libasound2t64 > /dev/null 2>&1 || sudo apt-get install -y -qq libasound2 > /dev/null 2>&1
+      - run: npm ci --no-audit --no-fund
+      - name: Render Video Chunk ${{ matrix.idx }}
+        run: |
+          IDX=${{ matrix.idx }}
+          START=$(( IDX * 1285 ))
+          if [ "$IDX" -eq 15 ]; then
+            END=20569
+          else
+            END=$(( (IDX + 1) * 1285 - 1 ))
+          fi
+          echo "Rendering frames ${START}-${END}..."
+          npx remotion render SudutGanjilA1 chunk-${IDX}.mp4 --frames=${START}-${END} --muted --codec=h264 --crf=20 --concurrency=4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.idx }}
+          path: chunk-${{ matrix.idx }}.mp4
+          retention-days: 3
+
+  render-audio:
+    name: Audio Mix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install Chromium OS dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 > /dev/null 2>&1
+          sudo apt-get install -y -qq libasound2t64 > /dev/null 2>&1 || sudo apt-get install -y -qq libasound2 > /dev/null 2>&1
+      - run: npm ci --no-audit --no-fund
+      - name: Render Full Audio Track
+        run: npx remotion render SudutGanjilA1 audio.wav --codec=wav
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a1-audio
+          path: audio.wav
+          retention-days: 3
+
+  merge:
+    name: Merge & Publish MP4
+    needs: [render-chunks, render-audio]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Concat 16 video chunks + mux audio
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          rm -f concat.txt
+          for i in $(seq 0 15); do
+            echo "file 'artifacts/chunk-${i}/chunk-${i}.mp4'" >> concat.txt
+          done
+          ffmpeg -y -f concat -safe 0 -i concat.txt -i artifacts/a1-audio/audio.wav -c:v copy -c:a aac -b:a 192k -movflags +faststart SudutGanjilA1.mp4
+          ffprobe -v error -show_entries format=duration,size,bit_rate -show_entries stream=codec_name,width,height,r_frame_rate -of default=noprint_wrappers=1 SudutGanjilA1.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SudutGanjilA1-MP4
+          path: SudutGanjilA1.mp4
+          retention-days: 7
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create a1-render SudutGanjilA1.mp4 --repo ${{ github.repository }} --title "Sudut Ganjil Episode A1" --notes "Rendered 1920x1080 30fps via 16 parallel GitHub Actions workers" || gh release upload a1-render SudutGanjilA1.mp4 --repo ${{ github.repository }} --clobber
