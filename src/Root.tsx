@@ -2,7 +2,7 @@ import React from "react";
 import { Composition, Still } from "remotion";
 import { SudutGanjilA1 } from "./projects/educational/sudut-ganjil/a1/SudutGanjilA1";
 import { SudutGanjilA1Thumbnail } from "./projects/educational/sudut-ganjil/a1/SudutGanjilA1Thumbnail";
-import { A1_FPS, A1_HEIGHT, A1_TOTAL_FRAMES, A1_WIDTH } from "./projects/educational/sudut-ganjil/a1/a1_scenes";
+import { A1_FPS, A1_TOTAL_FRAMES } from "./projects/educational/sudut-ganjil/a1/a1_scenes";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -12,8 +12,8 @@ export const RemotionRoot: React.FC = () => {
         component={SudutGanjilA1}
         durationInFrames={A1_TOTAL_FRAMES}
         fps={A1_FPS}
-        width={A1_WIDTH}
-        height={A1_HEIGHT}
+        width={1920}
+        height={1080}
       />
       <Still
         id="ThumbnailA1"
